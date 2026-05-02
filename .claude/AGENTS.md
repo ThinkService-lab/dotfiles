@@ -20,6 +20,7 @@ This architecture is non-negotiable. Do not deviate from it unless a project-lev
 | Storage | Supabase Storage (optional — only if your app handles file/image uploads) |
 | State — server | TanStack React Query |
 | State — local | Zustand |
+| UI Styling | NativeWind (Tailwind for React Native) |
 | Payments — mobile | RevenueCat |
 | Payments — web | Stripe |
 | Push Notifications | Expo Notifications (APNs + FCM) |
@@ -106,15 +107,7 @@ npm install -g supabase
 npm install -g pnpm
 ```
 
-Required accounts (verify they exist before starting):
-- Apple Developer Program — https://developer.apple.com/programs/ ($99/year)
-- Google Play Console — https://play.google.com/console ($25 one-time)
-- Supabase — https://supabase.com
-- Expo / EAS — https://expo.dev
-- RevenueCat — https://www.revenuecat.com
-- Sentry — https://sentry.io
-- PostHog — https://posthog.com
-- Vercel — https://vercel.com
+Required accounts: Apple Developer ($99/yr), Google Play Console ($25 one-time), Supabase, Expo, RevenueCat (if monetising), Sentry, PostHog, Vercel (if web). Verify all exist before Phase 2.
 
 ---
 
@@ -145,6 +138,7 @@ pnpm add react-native-url-polyfill
 npx expo install @supabase/supabase-js expo-sqlite expo-secure-store expo-file-system expo-image-picker
 pnpm add expo-router expo-constants expo-linking expo-status-bar
 pnpm add @tanstack/react-query zustand
+pnpm add nativewind && pnpm add -D tailwindcss@3.3.2
 pnpm add react-native-purchases
 pnpm add expo-notifications expo-device
 pnpm add @sentry/react-native
@@ -284,6 +278,8 @@ AppState.addEventListener('change', (state) => {
 
 Docs: https://supabase.com/docs/guides/getting-started/quickstarts/expo-react-native
 
+**Verify Phase 4:** From a screen, run `console.log(await supabase.auth.getSession())` — should return `{ data: { session: null }, error: null }` (no error). Failure here means the client is misconfigured.
+
 ---
 
 ## Phase 5 — Authentication
@@ -384,12 +380,12 @@ After every migration, regenerate types:
 supabase gen types typescript --linked > src/types/database.ts
 ```
 
-Audit query — run before every deployment:
+**Verify Phase 6 (run before EVERY deployment):**
 
 ```sql
 SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';
 ```
-Every row must show `rowsecurity = true`.
+Every row must show `rowsecurity = true`. If any row shows `false`, stop and add RLS before continuing.
 
 Docs:
 - RLS guide: https://supabase.com/docs/guides/database/postgres/row-level-security
@@ -577,7 +573,190 @@ Docs:
 
 ---
 
-## Phase 12 — EAS Build & CI/CD
+## Phase 12 — UI Styling (NativeWind)
+
+NativeWind brings Tailwind class syntax to React Native. Same classes as web — `className="flex-1 bg-white p-4"` works on iOS, Android, and web.
+
+**Install:**
+
+```bash
+pnpm add nativewind
+pnpm add -D tailwindcss@3.3.2
+npx tailwindcss init
+```
+
+**Configure `tailwind.config.js`:**
+
+```javascript
+module.exports = {
+  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  presets: [require('nativewind/preset')],
+  theme: { extend: {} },
+  plugins: [],
+};
+```
+
+**Configure `babel.config.js`:**
+
+```javascript
+module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: [['babel-preset-expo', { jsxImportSource: 'nativewind' }], 'nativewind/babel'],
+  };
+};
+```
+
+**Create `src/global.css`:**
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+Import once at the top of `src/app/_layout.tsx`:
+
+```typescript
+import '../global.css';
+```
+
+**Usage:**
+
+```typescript
+import { View, Text } from 'react-native';
+
+export function Card({ title }: { title: string }) {
+  return (
+    <View className="bg-white rounded-xl p-4 shadow">
+      <Text className="text-lg font-semibold text-slate-900">{title}</Text>
+    </View>
+  );
+}
+```
+
+**Verify Phase 12:** A `<View className="bg-red-500">` should render with a red background on all platforms. If it doesn't, the babel config is the most common cause.
+
+Docs: https://www.nativewind.dev/getting-started/expo
+
+---
+
+## Phase 13 — Testing
+
+Three layers, each with one tool. Don't add more.
+
+| Layer | Tool | What it covers |
+|---|---|---|
+| Unit / component | Jest + React Native Testing Library | Pure functions, hooks, components in isolation |
+| Integration | Jest + RNTL | Multiple components together, mocked Supabase |
+| End-to-end | Maestro | Full user flows on simulator/device |
+
+**Install:**
+
+```bash
+pnpm add -D jest jest-expo @testing-library/react-native @testing-library/jest-native
+pnpm add -D @types/jest
+```
+
+**Configure `package.json`:**
+
+```json
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "setupFilesAfterEach": ["@testing-library/jest-native/extend-expect"]
+  }
+}
+```
+
+**Test file convention:** Co-locate tests next to source as `<filename>.test.tsx`.
+
+**Mock Supabase in tests:** Create `src/lib/__mocks__/supabase.ts` with stubbed methods. Never hit the real DB from tests.
+
+**Maestro for E2E** (install separately, only when you have stable flows):
+
+```bash
+curl -Ls "https://get.maestro.mobile.dev" | bash
+```
+
+Write flows in `.maestro/<flow_name>.yaml`. Run with `maestro test .maestro/login.yaml`.
+
+**Verify Phase 13:** `pnpm test` runs and passes with at least one assertion. Add a smoke test for the Home screen as the first test.
+
+Docs:
+- Jest Expo: https://docs.expo.dev/develop/unit-testing/
+- React Native Testing Library: https://callstack.github.io/react-native-testing-library/
+- Maestro: https://maestro.mobile.dev/
+
+---
+
+## Phase 14 — Git Workflow
+
+**Branch strategy:**
+- `main` — always deployable. Production builds come from here only.
+- `dev` — integration branch. Feature branches merge here first.
+- `feature/<short-name>` — one branch per feature. Squash-merge into `dev`.
+
+**Commit format (Conventional Commits):**
+
+```
+<type>(<scope>): <subject>
+
+<optional body>
+```
+
+Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`.
+
+Examples:
+- `feat(auth): add magic link login`
+- `fix(profile): handle null avatar URL`
+- `chore(deps): bump expo to sdk 54`
+
+**Required `.gitignore` entries:**
+
+```
+.env.local
+.env*.local
+node_modules/
+ios/
+android/
+.expo/
+dist/
+*.log
+google-service-account.json
+```
+
+**Commit policy:**
+- Never commit `.env*` files. Verify before every commit: `git diff --cached --name-only | grep -i env` should return nothing.
+- Never commit `google-service-account.json`.
+- Never commit generated files: `ios/`, `android/`, `dist/`, `.expo/`.
+- Migrations (`supabase/migrations/*.sql`) ARE committed.
+
+**PR template (`.github/pull_request_template.md`):**
+
+```markdown
+## What
+Brief description of the change.
+
+## Why
+The user-facing or technical reason.
+
+## Verification
+- [ ] Tested on iOS simulator
+- [ ] Tested on Android emulator
+- [ ] RLS audit query passes (if migrations included)
+- [ ] No new console warnings
+```
+
+**Verify Phase 14:** `git status` shows no `.env*` or `node_modules` files. `cat .gitignore` includes all entries above.
+
+---
+
+## Phase 15 — EAS Build & CI/CD
 
 `eas.json`:
 
@@ -619,7 +798,7 @@ Docs: https://docs.expo.dev/build/introduction/
 
 ---
 
-## Phase 13 — Apple App Store Deployment
+## Phase 16 — Apple App Store Deployment
 
 Pre-submission checklist (verify every item):
 - [ ] `bundleIdentifier` in `app.json` matches App Store Connect
@@ -647,7 +826,7 @@ Docs:
 
 ---
 
-## Phase 14 — Google Play Store Deployment
+## Phase 17 — Google Play Store Deployment
 
 Pre-submission checklist:
 - [ ] `android.package` in `app.json` matches Play Console
@@ -672,7 +851,7 @@ Docs:
 
 ---
 
-## Phase 15 — Web Deployment (Vercel)
+## Phase 18 — Web Deployment (Vercel)
 
 ```bash
 npx expo export --platform web
@@ -690,7 +869,7 @@ Docs: https://docs.expo.dev/workflow/web/
 
 ---
 
-## Phase 16 — Post-Launch Checklist
+## Phase 19 — Post-Launch Checklist
 
 Security:
 - [ ] All tables have RLS enabled (run audit query from Phase 6)
@@ -713,95 +892,3 @@ Backup:
 - [ ] A restore has been tested at least once
 
 ---
-
-## Minimum Cost to Launch
-
-This section covers the real minimum costs to go from zero to a live app on both stores. All figures are verified from official pricing pages.
-
-### What is free (genuinely $0)
-
-| Service | Free Tier |
-|---|---|
-| Supabase | 500 MB DB, 1 GB storage, 50K MAUs, 10 GB bandwidth, 500K Edge Function calls/month. **2 active projects max. Projects pause after 7 days of inactivity.** No backups, no SLA. |
-| EAS Build | 30 builds/month (max 15 iOS), lower priority queue. 1,000 EAS Update MAUs, 100 GB update bandwidth. |
-| RevenueCat | Free up to $2,500 MRR. No build or user limit below that. |
-| Vercel | Hobby tier covers most indie apps. 100 GB bandwidth/month. |
-| Sentry | 5,000 errors/month. |
-| PostHog | 1 million events/month. |
-
-### Unavoidable costs to ship to both stores
-
-| Cost | Amount | Notes |
-|---|---|---|
-| Apple Developer Program | **$99/year** | Required to submit to the App Store. Renews annually. |
-| Google Play Console | **$25 one-time** | Required to submit to the Play Store. Never renews. |
-| **Year 1 minimum** | **$124** | Apple $99 + Google $25 |
-| **Year 2+ minimum** | **$99/year** | Apple renewal only |
-
-### When to upgrade (trigger points)
-
-**Supabase → Pro ($25/month):**
-- Database approaches 400–450 MB (hitting 500 MB limit causes read-only mode)
-- Approaching 50,000 MAUs
-- You need daily backups (free tier has none)
-- You need the project to stay online without manual unpausing
-
-**EAS → Starter ($19/month):**
-- You need more than 30 builds/month
-- You need priority build queue (free builds can queue for 30–60+ minutes)
-- You need more than 1,000 EAS Update MAUs
-
-### Realistic cost at early traction (~5,000 users)
-
-| Service | Monthly Cost |
-|---|---|
-| Supabase | $0 (well within free tier) |
-| EAS | $0 or $19 depending on build frequency |
-| RevenueCat | $0 (below $2.5k MRR) |
-| Vercel | $0 |
-| Sentry + PostHog | $0 |
-| Apple (amortised) | ~$8/month |
-| **Total** | **$8–$27/month** |
-
-### Realistic cost at growth (~50,000 users)
-
-| Service | Monthly Cost |
-|---|---|
-| Supabase Pro | $25 |
-| EAS Starter | $19 |
-| RevenueCat | $0 if under $2.5k MRR, then % of revenue |
-| Vercel Pro | $20 |
-| Apple (amortised) | ~$8 |
-| **Total** | **~$72/month** |
-
-> **On the free Supabase tier:** Commercial use is explicitly allowed. The main risk is the 7-day inactivity pause — this is not a problem for apps with real users. Monitor your DB size in the Supabase dashboard. Set up an alert before you hit 450 MB.
-
----
-
-## Documentation Reference
-
-| Resource | URL |
-|---|---|
-| Expo Docs | https://docs.expo.dev |
-| Expo Router | https://docs.expo.dev/router/introduction/ |
-| EAS Build | https://docs.expo.dev/build/introduction/ |
-| EAS Submit | https://docs.expo.dev/submit/introduction/ |
-| EAS Update | https://docs.expo.dev/eas-update/introduction/ |
-| Supabase Docs | https://supabase.com/docs |
-| Supabase Auth | https://supabase.com/docs/guides/auth |
-| Supabase JS Client | https://supabase.com/docs/reference/javascript/introduction |
-| Row Level Security | https://supabase.com/docs/guides/database/postgres/row-level-security |
-| Supabase Storage | https://supabase.com/docs/guides/storage |
-| Supabase Edge Functions | https://supabase.com/docs/guides/functions |
-| Supabase CLI | https://supabase.com/docs/reference/cli/introduction |
-| RevenueCat Expo | https://www.revenuecat.com/docs/getting-started/installation/expo |
-| Apple Review Guidelines | https://developer.apple.com/app-store/review/guidelines/ |
-| Apple App Store Connect | https://developer.apple.com/help/app-store-connect/ |
-| Apple Privacy Manifest | https://developer.apple.com/documentation/bundleresources/privacy_manifest_files |
-| Apple HIG | https://developer.apple.com/design/human-interface-guidelines/ |
-| Google Play Console | https://support.google.com/googleplay/android-developer/ |
-| Google Data Safety | https://support.google.com/googleplay/android-developer/answer/10787469 |
-| Sentry React Native | https://docs.sentry.io/platforms/react-native/ |
-| PostHog React Native | https://posthog.com/docs/libraries/react-native |
-| Vercel Docs | https://vercel.com/docs |
-| GitHub Actions | https://docs.github.com/en/actions |
