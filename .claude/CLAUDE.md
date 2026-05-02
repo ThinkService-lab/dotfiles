@@ -33,7 +33,7 @@ This architecture is non-negotiable. Do not deviate from it unless the per-proje
 
 These rules apply to every file, every command, every decision.
 
-- Always use `pnpm`. Never `npm install` or `yarn`.
+- Use `pnpm` for JS-only dependencies. Use `npx expo install` for ANY package with native code (anything starting with `expo-`, `react-native-`, or `@react-native-`). Expo pins the version that matches your SDK — using pnpm/npm directly will install incompatible versions and silently break the native build.
 - Always use TypeScript. Never plain JavaScript.
 - Always use Expo Router for navigation. Never React Navigation standalone.
 - Always use `expo-sqlite/localStorage/install` as the Supabase auth storage adapter (official Supabase recommendation). Do not use a raw `expo-secure-store` adapter — SecureStore has a 2KB limit that JWT tokens exceed, causing silent auth failures.
@@ -43,7 +43,35 @@ These rules apply to every file, every command, every decision.
 - Never put `SUPABASE_SERVICE_ROLE_KEY` in the app bundle or any `EXPO_PUBLIC_*` variable.
 - Never commit `.env.local`. Always verify it is in `.gitignore` before the first commit.
 - Never use unicode bullet characters (`•`) in code — use proper list syntax.
-- Never use `\n` inside docx generation — use separate elements.
+
+---
+
+## Agent Operating Rules
+
+How the agent should behave when executing this manual:
+
+- **Read this entire file before the first action** in a new project. Do not start writing code based on a partial read.
+- **Confirm before destructive operations.** Always show a preview and ask for confirmation before: running `supabase db push`, dropping any table, deleting any file outside `node_modules`, force-pushing to git, or running `eas submit`.
+- **Show the SQL diff before applying migrations.** Print the migration file content and ask "Apply this migration to the linked Supabase project? (y/n)" before running `supabase db push`.
+- **Run the RLS audit query after every migration.** Verify `rowsecurity = true` for all new tables before continuing.
+- **If a phase is ambiguous or context is missing, stop and ask.** Do not guess at the project name, bundle ID, Supabase ref, or any value the user has not provided.
+- **State which phase you are in** at the start of each significant action. Example: "[Phase 6] Creating profiles table migration."
+- **Never claim a phase is complete without verification.** After Phase 4 setup, run a test query. After Phase 5 auth, attempt a test login. After Phase 6 migration, query `pg_tables`.
+- **If a command fails, stop and report.** Do not silently retry or work around it.
+
+---
+
+## Boot Sequence (First Action in Any New Project)
+
+When the agent enters a project folder for the first time, run this checklist before doing anything else:
+
+1. **Check for project CLAUDE.md.** Read `./CLAUDE.md` if it exists — those instructions override anything in this global file.
+2. **Detect project state.** Run `ls -la` to see if this is a fresh folder, an in-progress project, or an existing app. Adjust the starting phase accordingly.
+3. **Verify toolchain.** Run the Phase 1 verification block (`node --version`, `pnpm --version`, `expo --version`, `eas --version`, `supabase --version`). Report missing tools before proceeding.
+4. **Read `app.json` if it exists.** Confirm bundle ID, slug, and version match the project CLAUDE.md.
+5. **Check `.gitignore` includes `.env.local`.** If it does not, fix it before any other action.
+
+Only after all 5 steps are clean does the agent proceed to the requested phase.
 
 ---
 
@@ -54,7 +82,7 @@ Before initialising a project, verify all tools are installed:
 ```bash
 node --version        # must be LTS via nvm
 pnpm --version
-expo --version
+npx expo --version    # no global expo-cli — modern Expo uses npx
 eas --version
 supabase --version
 ```
@@ -66,8 +94,8 @@ If any are missing:
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 nvm install --lts && nvm use --lts
 
-# Expo + EAS
-npm install -g expo-cli eas-cli
+# EAS CLI (expo-cli is deprecated — modern usage is `npx create-expo-app` and `npx expo` directly)
+npm install -g eas-cli
 
 # Supabase CLI
 npm install -g supabase
@@ -442,7 +470,9 @@ Docs: https://docs.expo.dev/build-reference/variables/
 
 ---
 
-## Phase 9 — Payments & Monetisation
+## Phase 9 — Payments & Monetisation (OPTIONAL)
+
+Skip this phase if your app is free with no in-app purchases or subscriptions. You can add payments later without architectural changes.
 
 **Install (must use `npx expo install`, not pnpm — native module version pinning required):**
 
@@ -488,7 +518,9 @@ Docs:
 
 ---
 
-## Phase 10 — Push Notifications
+## Phase 10 — Push Notifications (OPTIONAL)
+
+Skip this phase if your app does not need to send notifications. Most utility apps and v1 launches do not need push.
 
 Add to `app.json` plugins:
 
@@ -518,7 +550,7 @@ pnpm add @sentry/react-native
 npx @sentry/wizard@latest -i reactNative
 ```
 
-Init in `app/_layout.tsx`:
+Init in `src/app/_layout.tsx`:
 
 ```typescript
 import * as Sentry from '@sentry/react-native';
@@ -532,6 +564,7 @@ Sentry.init({
 **PostHog:**
 
 ```typescript
+// In src/app/_layout.tsx
 import { PostHogProvider } from 'posthog-react-native';
 // Wrap root layout with <PostHogProvider apiKey={...} options={{ host: 'https://app.posthog.com' }}>
 ```
@@ -647,15 +680,9 @@ vercel
 
 Add all `EXPO_PUBLIC_*` variables to Vercel Dashboard → Project Settings → Environment Variables. Use `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — not the legacy `ANON_KEY`.
 
-> **Warning:** `expo-secure-store` does not work on web. Use a conditional storage adapter in `src/lib/supabase.ts`:
+> **Storage adapter on web:** No special handling needed. The `expo-sqlite/localStorage/install` polyfill used in Phase 4 works on both native and web — it falls back to the browser's native localStorage when running in a browser environment.
 
-```typescript
-const storage = Platform.OS === 'web'
-  ? { getItem: (k) => Promise.resolve(localStorage.getItem(k)),
-      setItem: (k, v) => Promise.resolve(localStorage.setItem(k, v)),
-      removeItem: (k) => Promise.resolve(localStorage.removeItem(k)) }
-  : ExpoSecureStoreAdapter;
-```
+> **Native-only modules will not work on web.** `react-native-purchases` (RevenueCat) does not run on web — use RevenueCat Web Billing (Stripe) for web subscriptions, see Phase 9. `expo-notifications` push tokens do not work on web. Wrap any native-only initialisation in `if (Platform.OS !== 'web')`.
 
 Docs: https://docs.expo.dev/workflow/web/
 
