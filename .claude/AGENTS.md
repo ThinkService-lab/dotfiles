@@ -1,8 +1,10 @@
 # Global App Architecture — Agent Instructions
 
+This file is the cross-tool agent instruction standard (`AGENTS.md`). It is read by Claude Code, Codex, Cursor, Antigravity, GitHub Copilot, Windsurf, and any other tool that respects the AGENTS.md open standard maintained by the Agentic AI Foundation.
+
 You are building a cross-platform app (iOS, Android, Web) using the standard architecture defined below.
 Read this file fully before writing any code, creating any file, or running any command.
-This architecture is non-negotiable. Do not deviate from it unless the per-project CLAUDE.md explicitly overrides a section.
+This architecture is non-negotiable. Do not deviate from it unless a project-level `AGENTS.md` (or tool-specific equivalent like `CLAUDE.md` or `GEMINI.md`) explicitly overrides a section.
 
 ---
 
@@ -65,10 +67,10 @@ How the agent should behave when executing this manual:
 
 When the agent enters a project folder for the first time, run this checklist before doing anything else:
 
-1. **Check for project CLAUDE.md.** Read `./CLAUDE.md` if it exists — those instructions override anything in this global file.
+1. **Check for project-level instructions.** Read `./AGENTS.md`, `./CLAUDE.md`, or `./GEMINI.md` if any exist (in that priority order) — those instructions override anything in this global file.
 2. **Detect project state.** Run `ls -la` to see if this is a fresh folder, an in-progress project, or an existing app. Adjust the starting phase accordingly.
 3. **Verify toolchain.** Run the Phase 1 verification block (`node --version`, `pnpm --version`, `expo --version`, `eas --version`, `supabase --version`). Report missing tools before proceeding.
-4. **Read `app.json` if it exists.** Confirm bundle ID, slug, and version match the project CLAUDE.md.
+4. **Read `app.json` if it exists.** Confirm bundle ID, slug, and version match the project-level instruction file.
 5. **Check `.gitignore` includes `.env.local`.** If it does not, fix it before any other action.
 
 Only after all 5 steps are clean does the agent proceed to the requested phase.
