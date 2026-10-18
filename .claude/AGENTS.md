@@ -78,6 +78,45 @@ Only after all 5 steps are clean does the agent proceed to the requested phase.
 
 ---
 
+## Product Discovery and Existing-App Investigation
+
+Before planning a new app or substantial feature that addresses shortcomings in existing products, complete this discovery process.
+
+1. **Identify the alternatives and complaints.**
+   Record the relevant apps, affected users, complaint sources, and the situations that trigger frustration.
+   Treat individual complaints as hypotheses until corroborated.
+
+2. **Inspect the actual experience.**
+   Where access is available, walk through the relevant flows.
+   Record what works, what fails, and existing workarounds.
+   Distinguish observed behavior from reported complaints.
+
+3. **Assess whether technical investigation would help.**
+   Use available source code, documentation, browser tools, and runtime observations.
+   Explicitly assess whether Reverse Engineer Anything (REA) can answer a specific unresolved question through packaged-app inspection or reverse engineering.
+   Check tool availability before relying on REA.
+   If needed, use a working REA MCP connection or CLI with the required analysis tools.
+   If REA is unavailable, record the limitation and continue independent research; do not claim an investigation was performed.
+
+4. **Keep conclusions evidence-based.**
+   Separate verified findings, technical inferences, and unknowns.
+   Client-side inspection does not establish how a private backend works.
+
+5. **Define our improvement before implementation.**
+   For each priority problem, state the affected user, existing behavior, proposed improvement, and measurable acceptance criteria.
+   Explain why our approach should solve the complaint.
+   Record the findings and REA assessment in the project's discovery or planning document so other agents can reuse the evidence.
+
+6. **Build and verify our own implementation.**
+   Follow the project's approved architecture.
+   Test the original frustrating scenario end to end and verify that our implementation improves the outcome.
+
+7. **Scale the investigation to the decision.**
+   Reuse relevant discovery findings for routine work.
+   Investigate further when new evidence or uncertainty could change the product or technical direction.
+
+---
+
 ## Phase 1 — Prerequisites
 
 Before initialising a project, verify all tools are installed:
@@ -892,3 +931,38 @@ Backup:
 - [ ] A restore has been tested at least once
 
 ---
+# graphify
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
+
+---
+
+## Global Agent Guidelines
+
+### Style
+- Never use the em dash. Use a plain dash "-" instead.
+
+### Commit Messages
+- Never auto-add an agent name as co-author in commit messages.
+
+### File Handling
+- Never manually modify CHANGELOG.md or any file marked as auto-generated.
+
+### Markdown
+- When writing or substantially editing long Markdown files, put each full sentence on its own line.
+- Preserve normal Markdown structure but avoid wrapping multiple sentences onto one physical line.
+
+### Technical Decisions
+- Do not give much weight to development cost when making technical decisions.
+- Prefer quality, simplicity, robustness, scalability, and long-term maintainability.
+
+### Bug Fixes
+- Always start by reproducing the bug in an E2E setting as closely aligned with how an end user sees it.
+- This ensures you find the real problem so the fix actually solves it.
+
+### UI and E2E Testing
+- Be obsessed with pixel perfection and UI quality during E2E testing.
+- If something looks off, even if unrelated to the current task, get it fixed.
+
+### Engineering Excellence
+- If lint errors, test failures, or test flakiness are spotted - even if not caused by current work - still get them fixed.
